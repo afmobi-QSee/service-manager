@@ -1,2 +1,2 @@
 # service-manager
-micro service register and discovery thougth 
+micro service register and discovery thourgh etcd 
