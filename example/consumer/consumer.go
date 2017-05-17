@@ -4,20 +4,23 @@ import (
 	"log"
 	"time"
 
-	sm "service-manager"
+	discover "service-manager"
+	"fmt"
 )
 
 func main() {
-
-	w, err := sm.NewRegister("login", "192.168.18.111", 7777, []string{
+	m, err := discover.NewDiscovery("login", []string{
 		"http://192.168.18.100:2379",
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	w.Register()
+
+	i :=0
 	for {
-		//log.Println("isActive ->")
+		fmt.Println("all ->", m.GetNodes())
+		fmt.Println(i)
+		i++
 		time.Sleep(time.Second * 2)
 	}
 }

@@ -9,13 +9,22 @@ import (
 
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/context"
+	"strconv"
 )
 
 type Discovery struct {
 	sync.RWMutex
 	kapi   client.KeysAPI
 	serviceName    string
-	nodes  map[string]string
+	nodes  map[string]Node
+}
+
+type Node struct{
+	serviceId	string
+	protocol	string
+	ip		string
+	port 		int
+	active  	bool
 }
 
 func NewDiscovery(serviceName string, endpoints []string) (*Discovery, error) {
@@ -32,7 +41,7 @@ func NewDiscovery(serviceName string, endpoints []string) (*Discovery, error) {
 	Discovery := &Discovery{
 		kapi:   client.NewKeysAPI(c),
 		serviceName:    serviceName,
-		nodes:  make(map[string]string),
+		nodes:  make(map[string]Node),
 	}
 	Discovery.fetch()
 
@@ -42,7 +51,7 @@ func NewDiscovery(serviceName string, endpoints []string) (*Discovery, error) {
 	return Discovery, err
 }
 
-func (dis *Discovery) GetNodes() map[string]string {
+func (dis *Discovery) GetNodes() map[string]Node {
 	dis.RLock()
 	defer dis.RUnlock()
 	return dis.nodes
@@ -96,17 +105,25 @@ func (dis *Discovery) watch() {
 func (dis *Discovery) addNode(key, isActive string) {
 	dis.Lock()
 	defer dis.Unlock()
-	log.Println(key)
-	log.Println(dis.getKey())
 	service := strings.TrimPrefix(key, dis.getKey())
-	log.Println(service)
-	log.Println(isActive)
-	dis.nodes[service] = isActive
+
+	tmpNode := strings.Split(service,":")
+	port,_ := strconv.Atoi(tmpNode[3])
+	active,_ := strconv.ParseBool(isActive);
+	node := &Node{
+		protocol:tmpNode[1],
+		ip: tmpNode[2],
+		port: port,
+		active: active,
+	}
+	dis.nodes[tmpNode[0]] = *node
 }
 
 func (dis *Discovery) delNode(key string) {
 	dis.Lock()
 	defer dis.Unlock()
 	service := strings.TrimPrefix(key, dis.getKey())
-	delete(dis.nodes, service)
+
+	tmpNode := strings.Split(service,":")
+	delete(dis.nodes, tmpNode[0])
 }

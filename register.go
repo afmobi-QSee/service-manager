@@ -22,7 +22,6 @@ type Register struct {
 	ip		string
 	port 		int
 	active  	bool
-	stop    	bool
 }
 
 func NewRegister(serviceName string,ip string, port int, endpoints []string) (*Register, error) {
@@ -36,11 +35,15 @@ func NewRegister(serviceName string,ip string, port int, endpoints []string) (*R
 		return nil, err
 	}
 
-
+	//create service info
+	if(ip == ""){
+		ip = GetIP()
+	}
+	serviceID := serviceName + "_" + ip + "_" + strconv.Itoa(port)
 	Register := &Register{
 		kapi:    	client.NewKeysAPI(cli),
 		serviceName:	serviceName,
-		serviceId:	serviceName,
+		serviceId:	serviceID,
 		protocol:	"http",
 		ip:		ip,
 		port:		port,
