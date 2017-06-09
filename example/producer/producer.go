@@ -16,7 +16,7 @@ func main() {
 
 	fmt.Println(sm.GetIP())
 	w, err := sm.NewRegister("login", "", *port, []string{
-		"http://192.168.18.100:2379",
+		"http://10.240.36.31:2379",
 	})
 	if err != nil {
 		log.Fatal(err)
