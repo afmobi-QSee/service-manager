@@ -14,7 +14,9 @@ type ServerCfg struct {
 func main() {
 	s := new(ServerCfg)
 	_, err := InitConfig("test" ,s ,[]string{
-		"http://10.240.36.31:2379",
+		"http://10.240.36.209:2379",
+		"http://10.240.36.210:2379",
+		"http://10.240.36.211:2379",
 	})
 	if err != nil {
 		fmt.Println("init config falure.")
