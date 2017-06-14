@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/context"
 	"strings"
 	"errors"
+	"strconv"
 )
 
 const CONFIG_ROOT = "/config/"
@@ -120,14 +121,52 @@ func (cfg *Config) fetch(path string,items map[string]interface{}) error {
 				cfg.fetch(v.Key,newitem)
 			}else {
 				nKey := cfg.getItemKey(v.Key)
-				items[nKey] = v.Value
+
+				//list
+				if(!cfg.processList(items,v)){
+					items[nKey] = v.Value
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func (cfg *Config) updateItem(node client.Node) {
+func (cfg *Config) processList(items map[string]interface{}, node *client.Node) bool {
+	nKey := cfg.getItemKey(node.Key)
+
+	idx := strings.Index(nKey,"list_")
+	if(idx == 0){
+		i_k := strings.Split(nKey,"_")
+		i, err := strconv.Atoi(i_k[1])
+		fmt.Println(i)
+
+		if(err != nil){
+			fmt.Println(err.Error())
+		}
+		k := i_k[2]
+		if(k != ""){
+			//if list inited
+			its,ok:= items[k].([]interface{})
+			if(ok){
+				//fmt.Println("ok")
+			}
+			if(its != nil){
+				its = append(its,node.Value)
+				items[k] = its
+			}else {
+				list := make([]interface{},0)
+				list = append(list,node.Value)
+				items[k] = list
+			}
+		}
+		return true
+	}else {
+		return false
+	}
+}
+
+func (cfg *Config) updateItem(node *client.Node) {
 	nKey := cfg.getItemKey(node.Key)
 	items,err := cfg.getItems("")
 	if(err != nil){
