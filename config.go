@@ -24,6 +24,9 @@ type Config struct {
 	items         map[string]interface{}
 }
 
+/**
+ * init conifg
+ */
 func InitConfig(serviceName string, serviceStruct interface{}, endpoints []string) (*Config, error) {
 	cfg := client.Config{
 		Endpoints:               endpoints,
@@ -50,18 +53,218 @@ func InitConfig(serviceName string, serviceStruct interface{}, endpoints []strin
 	return Config, err
 }
 
-
-func (cfg *Config) getItemKey(path string)string  {
-	subs := strings.Split(path,"/")
-	return subs[len(subs)-1]
-	//idx := strings.Index(key,CONFIG_ROOT+cfg.serviceName)
-	//return key[idx:]
+/**
+ * log config into struct
+ */
+func (cfg *Config) reload() {
+	jsonb, _ := json.Marshal(cfg.items)
+	fmt.Println(string(jsonb))
+	err := json.Unmarshal(jsonb,cfg.serviceStruct)
+	if(err != nil){
+		fmt.Println(err.Error())
+	}
+	fmt.Println(cfg.serviceStruct)
 }
 
-func (cfg *Config) getItems(path string) (map[string]interface{}, error)  {
+/**
+ * fetch root items
+ */
+func (cfg *Config) fetch(path string,items map[string]interface{}) error {
+	resp, err := cfg.kapi.Get(context.Background(), path, &client.GetOptions{
+		Recursive: true,
+	})
+	if err != nil {
+		return err
+	}
+	return extract(resp.Node, cfg.items)
+}
+
+/**
+ * fill the value cantiner
+ */
+func extract(node *client.Node,nodeValues map[string]interface{}) error {
+	if(node.Dir){
+		for _, childNode := range node.Nodes {
+			if(childNode.Dir){
+				newitem := make(map[string]interface{})
+
+				vKey := getKey(childNode)
+				nodeValues[vKey] = newitem
+
+				extract(childNode,newitem)
+			}else {
+				if(!createOrUpdateList(nodeValues,childNode)){
+					vKey := getKey(childNode)
+					nodeValues[vKey] = childNode.Value
+				}
+			}
+		}
+	}else {
+		return errors.New("Node is not a Dir Node")
+	}
+	return nil
+}
+
+/**
+ * get node`s value key
+ */
+func getKey(node *client.Node)string  {
+	subs := strings.Split(node.Key,"/")
+	if(len(subs) < 1){
+		return ""
+	}
+	return subs[len(subs)-1]
+}
+
+
+/**
+ * process list items
+ */
+func createOrUpdateList(nodeValues map[string]interface{}, node *client.Node) bool {
+	nodeKey := getKey(node)
+	isListKey := strings.Index(nodeKey,"list_")
+
+	if(isListKey == 0){//list key
+		idx_key := strings.Split(nodeKey,"_")
+		idx, err := strconv.Atoi(idx_key[1])
+		fmt.Println(idx)
+
+		if(err != nil){
+			fmt.Println(err.Error())
+		}
+		key := idx_key[2]
+		if(key != ""){
+			//if list inited
+			list,ok:= nodeValues[key].([]interface{})
+			if(ok){
+				//fmt.Println("ok")
+			}
+			if(list != nil){
+				for i:=0; i<len(list); i++  {
+					//update
+					if(list[i] == node.Value){
+						list[i] = node.Value
+						nodeValues[key] = list
+						break
+					//insert
+					}else if(i+1 == len(list)){
+						list = append(list,node.Value)
+						nodeValues[key] = list
+					}
+				}
+			}else {//create
+				list := make([]interface{},0)
+				list = append(list,node.Value)
+				nodeValues[key] = list
+			}
+		}
+		return true
+
+	}else {// not list key
+		return false
+	}
+}
+
+/**
+ * process list items
+ */
+func deleteList(nodeValues map[string]interface{}, node *client.Node,preNode *client.Node) bool {
+	nodeKey := getKey(node)
+	isListKey := strings.Index(nodeKey,"list_")
+
+	if(isListKey == 0){//list key
+		idx_key := strings.Split(nodeKey,"_")
+		idx, err := strconv.Atoi(idx_key[1])
+		fmt.Println(idx)
+
+		if(err != nil){
+			fmt.Println(err.Error())
+		}
+		key := idx_key[2]
+		if(key != ""){
+			//if list inited
+			list,ok:= nodeValues[key].([]interface{})
+			if(ok){
+				//fmt.Println("ok")
+			}
+			if(list != nil){
+				//delete
+				if(node.Value == ""){
+					for i:=0; i<len(list); i++  {
+						if(list[i] == preNode.Value){
+							list = append(list[:i], list[i+1:]...)
+							if(len(list) <= 0){
+								delete(nodeValues,key)
+							}else {
+								nodeValues[key] = list
+							}
+							break
+						}
+					}
+				}
+			}
+		}
+		return true
+
+	}else {// not list key
+		return false
+	}
+}
+
+/**
+ * watch changing
+ */
+func (cfg *Config) watch(path string) {
+	watcher := cfg.kapi.Watcher(path, &client.WatcherOptions{
+		Recursive: true,
+	})
+	for {
+		resp, err := watcher.Next(context.Background())
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		switch resp.Action {
+		case "set", "update":
+			parentNodeValues,err := cfg.getParentNodeValues(resp.Node)
+			if(err != nil){
+				fmt.Println(err.Error())
+			}
+
+			if(!createOrUpdateList(parentNodeValues,resp.Node)){
+				nodeKey := getKey(resp.Node)
+				parentNodeValues[nodeKey] = resp.Node.Value
+			}
+			fmt.Println("update-config--- key: "+ resp.Node.Key + "- value: " + resp.Node.Value)
+			break
+		case "expire", "delete":
+			parentNodeValues,err := cfg.getParentNodeValues(resp.Node)
+			if(err != nil){
+				fmt.Println(err.Error())
+			}
+
+			if(!deleteList(parentNodeValues, resp.Node, resp.PrevNode)){
+				nodeKey := getKey(resp.Node)
+				delete(parentNodeValues,nodeKey)
+			}
+			fmt.Println("delete-config--- key: "+ resp.Node.Key + "- value: " + resp.Node.Value)
+			break
+		default:
+			log.Println("watch me!!!", "resp ->", resp)
+		}
+
+		cfg.reload()
+	}
+}
+
+/**
+ * get node values
+ */
+func (cfg *Config) getParentNodeValues(node *client.Node) (map[string]interface{}, error)  {
 	var result  map[string]interface{}
 
-	subs := strings.Split(path,"/")
+	subs := strings.Split(node.Key,"/")
 	//check
 	if(len(subs) < 3){
 		return nil,errors.New("error path")
@@ -76,8 +279,7 @@ func (cfg *Config) getItems(path string) (map[string]interface{}, error)  {
 	for i, item := range subs{
 		if(i == 2){
 			result = cfg.items
-		}
-		if (i > 2){
+		} else if (i > 2){
 			if(i == (len(subs)-1)){
 				break
 			}
@@ -93,126 +295,7 @@ func (cfg *Config) getItems(path string) (map[string]interface{}, error)  {
 			}
 		}
 	}
-	fmt.Println(result)
 	return result, nil
 }
-
-func (cfg *Config) reload() {
-	jsonb, _ := json.Marshal(cfg.items)
-	fmt.Println(string(jsonb))
-	err := json.Unmarshal(jsonb,cfg.serviceStruct)
-	if(err != nil){
-		fmt.Println(err.Error())
-	}
-	fmt.Println(cfg.serviceStruct)
-}
-
-func (cfg *Config) fetch(path string,items map[string]interface{}) error {
-	resp, err := cfg.kapi.Get(context.Background(), path, nil)
-	if err != nil {
-		return err
-	}
-	if resp.Node.Dir {
-		for _, v := range resp.Node.Nodes {
-			if v.Dir {
-				nKey := cfg.getItemKey(v.Key)
-				newitem := make(map[string]interface{})
-				items[nKey] = newitem
-				cfg.fetch(v.Key,newitem)
-			}else {
-				nKey := cfg.getItemKey(v.Key)
-
-				//list
-				if(!cfg.processList(items,v)){
-					items[nKey] = v.Value
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (cfg *Config) processList(items map[string]interface{}, node *client.Node) bool {
-	nKey := cfg.getItemKey(node.Key)
-
-	idx := strings.Index(nKey,"list_")
-	if(idx == 0){
-		i_k := strings.Split(nKey,"_")
-		i, err := strconv.Atoi(i_k[1])
-		fmt.Println(i)
-
-		if(err != nil){
-			fmt.Println(err.Error())
-		}
-		k := i_k[2]
-		if(k != ""){
-			//if list inited
-			its,ok:= items[k].([]interface{})
-			if(ok){
-				//fmt.Println("ok")
-			}
-			if(its != nil){
-				its = append(its,node.Value)
-				items[k] = its
-			}else {
-				list := make([]interface{},0)
-				list = append(list,node.Value)
-				items[k] = list
-			}
-		}
-		return true
-	}else {
-		return false
-	}
-}
-
-func (cfg *Config) updateItem(node *client.Node) {
-	nKey := cfg.getItemKey(node.Key)
-	items,err := cfg.getItems("")
-	if(err != nil){
-		fmt.Println(err.Error())
-	}
-	items[nKey] = node.Value
-}
-
-func (cfg *Config) watch(path string) {
-	watcher := cfg.kapi.Watcher(path, &client.WatcherOptions{
-		Recursive: true,
-	})
-	for {
-		resp, err := watcher.Next(context.Background())
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		switch resp.Action {
-		case "set", "update":
-			nKey := cfg.getItemKey(resp.Node.Key)
-			items,err := cfg.getItems(resp.Node.Key)
-			if(err != nil){
-				fmt.Println(err.Error())
-			}
-			items[nKey] = resp.Node.Value
-			fmt.Print("update-config---: key: "+ nKey + " value: " + resp.Node.Value)
-			break
-		case "expire", "delete":
-			nKey := cfg.getItemKey(resp.Node.Key)
-			items,err := cfg.getItems(resp.Node.Key)
-			if(err != nil){
-				fmt.Println(err.Error())
-			}
-			delete(items,nKey)
-			fmt.Print("delete-config---: key: "+ nKey + " value: " + resp.Node.Value)
-			break
-		default:
-			log.Println("watchme!!!", "resp ->", resp)
-		}
-
-		cfg.reload()
-	}
-}
-
-
 
 
