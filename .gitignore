@@ -18,3 +18,4 @@
 example/consumer/consumer
 example/producer/producer
 service-manager.iml
+.idea
