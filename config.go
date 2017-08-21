@@ -21,7 +21,7 @@ type Config struct {
 	kapi          client.KeysAPI
 	serviceName   string
 	serviceStruct interface{}
-	items         map[string]interface{}
+	Items         map[string]interface{}
 }
 
 /**
@@ -41,10 +41,10 @@ func InitConfig(serviceName string, serviceStruct interface{}, endpoints []strin
 		kapi:          client.NewKeysAPI(c),
 		serviceName:   serviceName,
 		serviceStruct: serviceStruct,
-		items:         make(map[string]interface{}),
+		Items:         make(map[string]interface{}),
 	}
 
-	Config.fetch(CONFIG_ROOT + serviceName, Config.items)
+	Config.fetch(CONFIG_ROOT + serviceName, Config.Items)
 	Config.reload()
 
 	/// `fetch` Timer may work well too?
@@ -53,11 +53,13 @@ func InitConfig(serviceName string, serviceStruct interface{}, endpoints []strin
 	return Config, err
 }
 
+
+
 /**
  * log config into struct
  */
 func (cfg *Config) reload() {
-	jsonb, _ := json.Marshal(cfg.items)
+	jsonb, _ := json.Marshal(cfg.Items)
 	fmt.Println(string(jsonb))
 	err := json.Unmarshal(jsonb,cfg.serviceStruct)
 	if(err != nil){
@@ -76,7 +78,7 @@ func (cfg *Config) fetch(path string,items map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	return extract(resp.Node, cfg.items)
+	return extract(resp.Node, cfg.Items)
 }
 
 /**
@@ -278,7 +280,7 @@ func (cfg *Config) getParentNodeValues(node *client.Node) (map[string]interface{
 
 	for i, item := range subs{
 		if(i == 2){
-			result = cfg.items
+			result = cfg.Items
 		} else if (i > 2){
 			if(i == (len(subs)-1)){
 				break
