@@ -53,6 +53,35 @@ func InitConfig(serviceName string, serviceStruct interface{}, endpoints []strin
 	return Config, err
 }
 
+/**
+ * init conifg function
+ */
+func InitConfigCallFunction(serviceName string, serviceStruct interface{}, endpoints []string, f func(interface{})) (*Config, error) {
+	cfg := client.Config{
+		Endpoints:               endpoints,
+		HeaderTimeoutPerRequest: time.Second * 2,
+	}
+	c, err := client.New(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	Config := &Config{
+		kapi:          client.NewKeysAPI(c),
+		serviceName:   serviceName,
+		serviceStruct: serviceStruct,
+		Items:         make(map[string]interface{}),
+	}
+
+	Config.fetch(CONFIG_ROOT + serviceName, Config.Items)
+	Config.reload()
+
+	/// `fetch` Timer may work well too?
+	go Config.watchCallFunction(CONFIG_ROOT + serviceName, f)
+	f(Config.Items)
+
+	return Config, err
+}
 
 
 /**
@@ -257,6 +286,58 @@ func (cfg *Config) watch(path string) {
 		}
 
 		cfg.reload()
+	}
+}
+
+/**
+ * watch changing call function
+ */
+func (cfg *Config) watchCallFunction(path string, f func(interface{})) {
+	watcher := cfg.kapi.Watcher(path, &client.WatcherOptions{
+		Recursive: true,
+	})
+	for {
+		resp, err := watcher.Next(context.Background())
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		switch resp.Action {
+		case "set", "update":
+			parentNodeValues,err := cfg.getParentNodeValues(resp.Node)
+			if(err != nil){
+				fmt.Println(err.Error())
+			}
+
+			if(!createOrUpdateList(parentNodeValues,resp.Node)){
+				nodeKey := getKey(resp.Node)
+				if resp.Node.Dir {
+					parentNodeValues[nodeKey] = make(map[string]interface{})
+				} else {
+					parentNodeValues[nodeKey] = resp.Node.Value
+				}
+			}
+			fmt.Println("update-config--- key: "+ resp.Node.Key + "- value: " + resp.Node.Value)
+			break
+		case "expire", "delete":
+			parentNodeValues,err := cfg.getParentNodeValues(resp.Node)
+			if(err != nil){
+				fmt.Println(err.Error())
+			}
+
+			if(!deleteList(parentNodeValues, resp.Node, resp.PrevNode)){
+				nodeKey := getKey(resp.Node)
+				delete(parentNodeValues,nodeKey)
+			}
+			fmt.Println("delete-config--- key: "+ resp.Node.Key + "- value: " + resp.Node.Value)
+			break
+		default:
+			log.Println("watch me!!!", "resp ->", resp)
+		}
+
+		cfg.reload()
+		f(cfg.Items)
 	}
 }
 
