@@ -39,19 +39,67 @@ type ThirdInfoSlice struct {
 	ThirdInfoSlice  ThirdInfo   `json:"thirdInfo"`
 }
 
+type PSignInfo struct {
+	PSign		[]string	`json:"pSign"`
+}
+
+type SignInfoSlice struct {
+	SignInfoSlice   map[string]PSignInfo     `json:"signInfo"`
+}
+
 func callChange(abc interface{}) {
 	fmt.Println("call change function============================================")
-	appInfoMap := make(map[string]ThirdInfoSlice)
+	//appInfoMap := make(map[string]ThirdInfoSlice)
 	jsonStr, err := json.Marshal(abc)
 	if err != nil {
 		fmt.Println("error =============")
 	}
-	if err := json.Unmarshal(jsonStr, &appInfoMap); err != nil {
+	//if err := json.Unmarshal(jsonStr, &appInfoMap); err != nil {
+	//	fmt.Println(err)
+	//}
+	//for k, v := range appInfoMap {
+	//	fmt.Println(k)
+	//	fmt.Println(v)
+	//}
+
+	signInfoMap := make(map[string]SignInfoSlice)
+	if err := json.Unmarshal(jsonStr, &signInfoMap); err != nil {
 		fmt.Println(err)
 	}
-	for k, v := range appInfoMap {
-		fmt.Println(k)
-		fmt.Println(v)
-	}
+	//appId := "123456"
+	//pName := "com.afmobi.tudc"
+	//pSign := "3B2B19B88552719822907F0AD1C964EA1835AC45"
+	//for k, v := range signInfoMap {
+	//	fmt.Println(k)
+	//	fmt.Println(v.SignInfoSlice)
+	//	if k == appId {
+	//		fmt.Println("appid ======= true")
+	//		for f, g := range v.SignInfoSlice {
+	//			if f == pName {
+	//				fmt.Println("==================")
+	//				for _, r := range g.PSign {
+	//					if pSign == r {
+	//						fmt.Println("dddddddddddddd")
+	//					}
+	//				}
+	//			}
+	//		}
+	//	}
+	//
+	//}
 
+	appInfoMap := make(map[string][]Pinfo)
+	for k, v := range signInfoMap {
+		var pInfos []Pinfo
+		for i, j := range v.SignInfoSlice {
+			pInfos = append(pInfos, Pinfo{PName:i, PSign:j.PSign})
+		}
+		appInfoMap[k] = pInfos
+	}
+	fmt.Println(appInfoMap)
+}
+
+type Pinfo struct {
+	PName 			string
+	PSign			[]string
 }
