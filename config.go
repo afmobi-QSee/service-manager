@@ -304,7 +304,7 @@ func (cfg *Config) watchCallFunction(path string, f func(interface{})) {
 		}
 
 		switch resp.Action {
-		case "set", "update":
+		case "set", "update", "create":
 			parentNodeValues,err := cfg.getParentNodeValues(resp.Node)
 			if(err != nil){
 				fmt.Println(err.Error())
